@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+import random
 
 import gradio as gr
 import torch
 import torchaudio
+
 
 from mmaudio.eval_utils import (ModelConfig, all_model_cfg, generate, load_video, make_video,
                                 setup_eval_logging)
@@ -48,12 +50,17 @@ def get_model() -> tuple[MMAudio, FeaturesUtils, SequenceConfig]:
 
 net, feature_utils, seq_cfg = get_model()
 
+def random_seed():
+    return random.randint(1, 2**64)
+
 
 @torch.inference_mode()
 def video_to_audio(video: gr.Video, prompt: str, negative_prompt: str, seed: int, num_steps: int,
                    cfg_strength: float, duration: float):
 
     rng = torch.Generator(device=device)
+    if seed == 0:
+        seed = random_seed()
     rng.manual_seed(seed)
     fm = FlowMatching(min_sigma=0, inference_mode='euler', num_steps=num_steps)
 
@@ -88,6 +95,8 @@ def text_to_audio(prompt: str, negative_prompt: str, seed: int, num_steps: int, 
                   duration: float):
 
     rng = torch.Generator(device=device)
+    if seed == 0:
+        seed = random_seed()
     rng.manual_seed(seed)
     fm = FlowMatching(min_sigma=0, inference_mode='euler', num_steps=num_steps)
 
