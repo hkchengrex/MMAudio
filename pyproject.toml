@@ -45,6 +45,7 @@ dependencies = [
   'open_clip_torch >= 2.29.0',
   'av >= 14.0.1',
   'timm >= 1.0.12',
+  'ffmpeg-python',
 ]
 
 [tool.hatch.build.targets.wheel]

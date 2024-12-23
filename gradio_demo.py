@@ -1,10 +1,12 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+import os
 
 import gradio as gr
 import torch
 import torchaudio
+import ffmpeg
 
 from mmaudio.eval_utils import (ModelConfig, all_model_cfg, generate, load_video, make_video,
                                 setup_eval_logging)
@@ -18,7 +20,13 @@ torch.backends.cudnn.allow_tf32 = True
 
 log = logging.getLogger()
 
-device = 'cuda'
+device = 'cpu'
+if torch.cuda.is_available():
+    device = 'cuda'
+elif torch.backends.mps.is_available():
+    device = 'mps'
+else:
+    log.warning('CUDA/MPS are not available, running on CPU')
 dtype = torch.bfloat16
 
 model: ModelConfig = all_model_cfg['large_44k_v2']
@@ -116,6 +124,46 @@ def text_to_audio(prompt: str, negative_prompt: str, seed: int, num_steps: int, 
     audio_save_path = output_dir / f'{current_time_string}.flac'
     torchaudio.save(audio_save_path, audio, seq_cfg.sampling_rate)
     return audio_save_path
+
+
+@torch.inference_mode()
+def image_to_audio(img: gr.Image, prompt: str, negative_prompt: str, seed: int, num_steps: int,
+                   cfg_strength: float, duration: float):
+
+    rng = torch.Generator(device=device)
+    if seed >= 0:
+        rng.manual_seed(seed)
+    else:
+        rng.seed()
+
+    # resize image so it's even (otherwise it fails)
+    probe = ffmpeg.probe(img)
+    width = int(probe['streams'][0]['width'])
+    height = int(probe['streams'][0]['height'])
+    new_width = width if width % 2 == 0 else width -1
+    new_height = height if height % 2 == 0 else height -1
+    img_dir, img_name = os.path.split(img)
+    resized_img = os.path.join(img_dir, f"resized_{img_name}")
+    if os.path.exists(resized_img):
+        os.remove(resized_img)
+    ffmpeg.input(img).filter('scale', new_width, new_height).output(resized_img).run()
+
+    # generate video from the frame
+    output_path = "temp.mp4"
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    ffmpeg.input(resized_img, t=duration, framerate=30, loop=1).output(output_path, vcodec="libx264", pix_fmt="yuv420p").run()
+
+    # generate audio + video
+    video = video_to_audio(output_path, prompt, negative_prompt, seed, num_steps, cfg_strength, duration)
+
+    # extract audio from the video 
+    wav = "temp.wav"
+    if os.path.exists(wav):
+        os.remove(wav)
+    ffmpeg.input(video).output(wav, acodec='pcm_s16le', ac=2, ar='44100').run()
+
+    return (video, wav)
 
 
 video_to_audio_tab = gr.Interface(
@@ -241,12 +289,30 @@ video_to_audio_tab = gr.Interface(
         ],
     ])
 
+image_to_audio_tab = gr.Interface(
+    fn=image_to_audio,
+    inputs=[
+        gr.Image(type="filepath"),
+        gr.Text(label='Prompt'),
+        gr.Text(label='Negative prompt', value='music'),
+        gr.Number(label='Seed (-1: random)', value=-1, precision=0, minimum=-1),
+        gr.Number(label='Num steps', value=25, precision=0, minimum=1),
+        gr.Number(label='Guidance Strength', value=4.5, minimum=1),
+        gr.Number(label='Duration (sec)', value=8, minimum=1),
+    ],
+    outputs=[
+        gr.Video(label='playable_video'),
+        gr.Audio(label='playable_audio'),
+    ],
+    title='MMAudio — Image-to-Audio Synthesis',
+)
+
 text_to_audio_tab = gr.Interface(
     fn=text_to_audio,
     inputs=[
         gr.Text(label='Prompt'),
         gr.Text(label='Negative prompt'),
-        gr.Number(label='Seed', value=0, precision=0, minimum=0),
+        gr.Number(label='Seed (-1: random)', value=-1, precision=0, minimum=-1),
         gr.Number(label='Num steps', value=25, precision=0, minimum=1),
         gr.Number(label='Guidance Strength', value=4.5, minimum=1),
         gr.Number(label='Duration (sec)', value=8, minimum=1),
@@ -257,6 +323,6 @@ text_to_audio_tab = gr.Interface(
 )
 
 if __name__ == "__main__":
-    gr.TabbedInterface([video_to_audio_tab, text_to_audio_tab],
-                       ['Video-to-Audio', 'Text-to-Audio']).launch(server_port=7860,
+    gr.TabbedInterface([video_to_audio_tab, image_to_audio_tab, text_to_audio_tab],
+                       ['Video-to-Audio', 'Image-to-Audio', 'Text-to-Audio']).launch(server_port=7860,
                                                                    allowed_paths=[output_dir])
