@@ -62,7 +62,13 @@ def main():
     skip_video_composite: bool = args.skip_video_composite
     mask_away_clip: bool = args.mask_away_clip
 
-    device = 'cuda'
+    device = 'cpu'
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif torch.backends.mps.is_available():
+        device = 'mps'
+    else:
+        log.warning('CUDA/MPS are not available, running on CPU')
     dtype = torch.float32 if args.full_precision else torch.bfloat16
 
     output_dir.mkdir(parents=True, exist_ok=True)
