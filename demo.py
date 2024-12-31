@@ -24,7 +24,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--variant',
                         type=str,
-                        default='large_44k_v2',
+                        default='small_44k',
                         help='small_16k, small_44k, medium_44k, large_44k, large_44k_v2')
     parser.add_argument('--video', type=Path, help='Path to the video file')
     parser.add_argument('--prompt', type=str, help='Input prompt', default='')
@@ -62,14 +62,9 @@ def main():
     skip_video_composite: bool = args.skip_video_composite
     mask_away_clip: bool = args.mask_away_clip
 
+    # Force CPU
     device = 'cpu'
-    if torch.cuda.is_available():
-        device = 'cuda'
-    elif torch.backends.mps.is_available():
-        device = 'mps'
-    else:
-        log.warning('CUDA/MPS are not available, running on CPU')
-    dtype = torch.float32 if args.full_precision else torch.bfloat16
+    dtype = torch.float32
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
