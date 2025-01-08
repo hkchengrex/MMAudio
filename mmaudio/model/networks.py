@@ -166,8 +166,8 @@ class MMAudio(nn.Module):
                                           self._clip_seq_len,
                                           device=self.device)
 
-        self.latent_rot = nn.Buffer(latent_rot, persistent=False)
-        self.clip_rot = nn.Buffer(clip_rot, persistent=False)
+        self.register_buffer('latent_rot', latent_rot, persistent=False)
+        self.register_buffer('clip_rot', clip_rot, persistent=False)
 
     def update_seq_lengths(self, latent_seq_len: int, clip_seq_len: int, sync_seq_len: int) -> None:
         self._latent_seq_len = latent_seq_len
@@ -238,9 +238,9 @@ class MMAudio(nn.Module):
         sync_f = sync_f.flatten(1, 2)  # (B, VN, D)
 
         # extend vf to match x
-        clip_f = self.clip_input_proj(clip_f)  # (B, VN, D)
+        clip_f = self.clip_input_proj(clip_f.clone())  # (B, VN, D)
         sync_f = self.sync_input_proj(sync_f)  # (B, VN, D)
-        text_f = self.text_input_proj(text_f)  # (B, VN, D)
+        text_f = self.text_input_proj(text_f.clone())  # (B, VN, D)
 
         # upsample the sync features to match the audio
         sync_f = sync_f.transpose(1, 2)  # (B, D, VN)
