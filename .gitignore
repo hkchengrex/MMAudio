@@ -144,3 +144,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Replicate
+.cog/
+output.mp4
+/weights 
+/ext_weights 
+/cache
