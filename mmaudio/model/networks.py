@@ -283,6 +283,7 @@ class MMAudio(nn.Module):
         for block in self.fused_blocks:
             latent = block(latent, extended_c, self.latent_rot)
 
+        # should be extended_c; this is a minor implementation error #55
         flow = self.final_layer(latent, global_c)  # (B, N, out_dim), remove t
         return flow
 

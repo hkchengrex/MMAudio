@@ -1,0 +1,70 @@
+VGGSound:
+  root: ../data/video
+  subset_name: sets/vgg3-train.tsv
+  fps: 8
+  height: 384
+  width: 384
+  sample_duration_sec: 8.0
+
+VGGSound_test:
+  root: ../data/video
+  subset_name: sets/vgg3-test.tsv
+  fps: 8
+  height: 384
+  width: 384
+  sample_duration_sec: 8.0
+
+VGGSound_val:
+  root: ../data/video
+  subset_name: sets/vgg3-val.tsv
+  fps: 8
+  height: 384
+  width: 384
+  sample_duration_sec: 8.0
+
+ExtractedVGG:
+  tsv: ../data/v1-16-memmap/vgg-train.tsv
+  memmap_dir: ../data/v1-16-memmap/vgg-train
+
+ExtractedVGG_test:
+  tag: test
+  gt_cache: ../data/eval-cache/vggsound-test
+  output_subdir: null
+  tsv: ../data/v1-16-memmap/vgg-test.tsv
+  memmap_dir: ../data/v1-16-memmap/vgg-test
+
+ExtractedVGG_val:
+  tag: val
+  gt_cache: ../data/eval-cache/vggsound-val
+  output_subdir: val
+  tsv: ../data/v1-16-memmap/vgg-val.tsv
+  memmap_dir: ../data/v1-16-memmap/vgg-val
+
+AudioCaps:
+  tsv: ../data/v1-16-memmap/audiocaps.tsv
+  memmap_dir: ../data/v1-16-memmap/audiocaps
+
+AudioSetSL:
+  tsv: ../data/v1-16-memmap/audioset_sl.tsv
+  memmap_dir: ../data/v1-16-memmap/audioset_sl
+
+BBCSound:
+  tsv: ../data/v1-16-memmap/bbcsound.tsv
+  memmap_dir: ../data/v1-16-memmap/bbcsound
+
+FreeSound:
+  tsv: ../data/v1-16-memmap/freesound.tsv
+  memmap_dir: ../data/v1-16-memmap/freesound
+
+Clotho:
+  tsv: ../data/v1-16-memmap/clotho.tsv
+  memmap_dir: ../data/v1-16-memmap/clotho
+
+Example_video:
+  tsv: ./training/example_output/memmap/vgg-example.tsv
+  memmap_dir: ./training/example_output/memmap/vgg-example
+
+Example_audio:
+  tsv: ./training/example_output/memmap/audio-example.tsv
+  memmap_dir: ./training/example_output/memmap/audio-example
+  

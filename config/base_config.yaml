@@ -1,0 +1,62 @@
+defaults:
+  - data: base
+  - eval_data: base
+  - override hydra/job_logging: custom-simplest
+  - _self_
+
+hydra:
+  run:
+    dir: ./output/${exp_id}
+  output_subdir: ${now:%Y-%m-%d_%H-%M-%S}-hydra
+
+enable_email: False
+
+model: small_16k
+
+exp_id: default
+debug: False
+cudnn_benchmark: True
+compile: True
+amp: True
+weights: null
+checkpoint: null
+seed: 14159265
+num_workers: 10 # per-GPU
+pin_memory: False # set to True if your system can handle it, i.e., have enough memory
+
+# NOTE: This DOSE NOT affect the model during inference in any way
+# they are just for the dataloader to fill in the missing data in multi-modal loading
+# to change the sequence length for the model, see networks.py
+data_dim:
+  text_seq_len: 77
+  clip_dim: 1024
+  sync_dim: 768
+  text_dim: 1024
+
+# ema configuration
+ema:
+  enable: True 
+  sigma_rels: [0.05, 0.1]
+  update_every: 1
+  checkpoint_every: 5_000
+  checkpoint_folder: ${hydra:run.dir}/ema_ckpts
+  default_output_sigma: 0.05
+
+
+# sampling
+sampling:
+  mean: 0.0
+  scale: 1.0
+  min_sigma: 0.0
+  method: euler
+  num_steps: 25
+
+# classifier-free guidance
+null_condition_probability: 0.1
+cfg_strength: 4.5
+
+# checkpoint paths to external modules
+vae_16k_ckpt: ./ext_weights/v1-16.pth
+vae_44k_ckpt: ./ext_weights/v1-44.pth
+bigvgan_vocoder_ckpt: ./ext_weights/best_netG.pt
+synchformer_ckpt: ./ext_weights/synchformer_state_dict.pth

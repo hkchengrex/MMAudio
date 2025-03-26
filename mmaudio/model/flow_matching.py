@@ -1,10 +1,8 @@
 import logging
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional
 
 import torch
 from torchdiffeq import odeint
-
-# from torchcfm.conditional_flow_matching import ExactOptimalTransportConditionalFlowMatcher
 
 log = logging.getLogger()
 
@@ -45,11 +43,7 @@ class FlowMatching:
         Cs: list[torch.Tensor],
         generator: Optional[torch.Generator] = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        # x0 = torch.randn_like(x1, generator=generator)
         x0 = torch.empty_like(x1).normal_(generator=generator)
-
-        # find mini-batch optimal transport
-        # x0, x1, _, Cs = self.fm.ot_sampler.sample_plan_with_labels(x0, x1, None, Cs, replace=True)
 
         xt = self.get_conditional_flow(x0, x1, t)
         return x0, x1, xt, Cs
@@ -73,16 +67,5 @@ class FlowMatching:
                 next_t = steps[ti + 1]
                 dt = next_t - t
                 x = x + dt * flow
-
-            # return odeint(fn,
-            #               x0,
-            #               torch.tensor([t0, t1], device=x0.device, dtype=x0.dtype),
-            #               method='rk4',
-            #               options=dict(step_size=(t1 - t0) / self.num_steps))[-1]
-            # return odeint(fn,
-            #               x0,
-            #               torch.tensor([t0, t1], device=x0.device, dtype=x0.dtype),
-            #               method='euler',
-            #               options=dict(step_size=(t1 - t0) / self.num_steps))[-1]
 
         return x

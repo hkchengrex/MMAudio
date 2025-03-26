@@ -10,28 +10,27 @@ log = logging.getLogger()
 links = [
     {
         'name': 'mmaudio_small_16k.pth',
-        'url': 'https://databank.illinois.edu/datafiles/k6jve/download',
+        'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_small_16k.pth',
         'md5': 'af93cde404179f58e3919ac085b8033b',
     },
     {
         'name': 'mmaudio_small_44k.pth',
-        'url': 'https://databank.illinois.edu/datafiles/864ya/download',
+        'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_small_44k.pth',
         'md5': 'babd74c884783d13701ea2820a5f5b6d',
     },
     {
         'name': 'mmaudio_medium_44k.pth',
-        'url': 'https://databank.illinois.edu/datafiles/pa94t/download',
+        'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_medium_44k.pth',
         'md5': '5a56b6665e45a1e65ada534defa903d0',
     },
     {
         'name': 'mmaudio_large_44k.pth',
-        'url': 'https://databank.illinois.edu/datafiles/4jx76/download',
+        'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_large_44k.pth',
         'md5': 'fed96c325a6785b85ce75ae1aafd2673'
     },
     {
         'name': 'mmaudio_large_44k_v2.pth',
-        # 'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_large_44k_v2.pth',
-        'url': 'https://databank.illinois.edu/datafiles/i1pd9/download',
+        'url': 'https://huggingface.co/hkchengrex/MMAudio/resolve/main/weights/mmaudio_large_44k_v2.pth',
         'md5': '01ad4464f049b2d7efdaa4c1a59b8dfe'
     },
     {

@@ -62,7 +62,13 @@ def main():
     skip_video_composite: bool = args.skip_video_composite
     mask_away_clip: bool = args.mask_away_clip
 
-    device = 'cuda'
+    device = 'cpu'
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif torch.backends.mps.is_available():
+        device = 'mps'
+    else:
+        log.warning('CUDA/MPS are not available, running on CPU')
     dtype = torch.float32 if args.full_precision else torch.bfloat16
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -81,12 +87,16 @@ def main():
                                   synchformer_ckpt=model.synchformer_ckpt,
                                   enable_conditions=True,
                                   mode=model.mode,
-                                  bigvgan_vocoder_ckpt=model.bigvgan_16k_path)
+                                  bigvgan_vocoder_ckpt=model.bigvgan_16k_path,
+                                  need_vae_encoder=False)
     feature_utils = feature_utils.to(device, dtype).eval()
 
     if video_path is not None:
         log.info(f'Using video {video_path}')
-        clip_frames, sync_frames, duration = load_video(video_path, duration)
+        video_info = load_video(video_path, duration)
+        clip_frames = video_info.clip_frames
+        sync_frames = video_info.sync_frames
+        duration = video_info.duration_sec
         if mask_away_clip:
             clip_frames = None
         else:
@@ -121,11 +131,7 @@ def main():
     log.info(f'Audio saved to {save_path}')
     if video_path is not None and not skip_video_composite:
         video_save_path = output_dir / f'{video_path.stem}.mp4'
-        make_video(video_path,
-                   video_save_path,
-                   audio,
-                   sampling_rate=seq_cfg.sampling_rate,
-                   duration_sec=seq_cfg.duration)
+        make_video(video_info, video_save_path, audio, sampling_rate=seq_cfg.sampling_rate)
         log.info(f'Video saved to {output_dir / video_save_path}')
 
     log.info('Memory usage: %.2f GB', torch.cuda.max_memory_allocated() / (2**30))

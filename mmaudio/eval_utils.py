@@ -3,15 +3,16 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import av
+import numpy as np
 import torch
 from colorlog import ColoredFormatter
+from PIL import Image
 from torchvision.transforms import v2
-from torio.io import StreamingMediaDecoder, StreamingMediaEncoder
 
+from mmaudio.data.av_utils import ImageInfo, VideoInfo, read_frames, reencode_with_audio
 from mmaudio.model.flow_matching import FlowMatching
 from mmaudio.model.networks import MMAudio
-from mmaudio.model.sequence_config import (CONFIG_16K, CONFIG_44K, SequenceConfig)
+from mmaudio.model.sequence_config import CONFIG_16K, CONFIG_44K, SequenceConfig
 from mmaudio.model.utils.features_utils import FeaturesUtils
 from mmaudio.utils.download_utils import download_model_if_needed
 
@@ -76,29 +77,40 @@ all_model_cfg: dict[str, ModelConfig] = {
 }
 
 
-def generate(clip_video: Optional[torch.Tensor],
-             sync_video: Optional[torch.Tensor],
-             text: Optional[list[str]],
-             *,
-             negative_text: Optional[list[str]] = None,
-             feature_utils: FeaturesUtils,
-             net: MMAudio,
-             fm: FlowMatching,
-             rng: torch.Generator,
-             cfg_strength: float):
+def generate(
+    clip_video: Optional[torch.Tensor],
+    sync_video: Optional[torch.Tensor],
+    text: Optional[list[str]],
+    *,
+    negative_text: Optional[list[str]] = None,
+    feature_utils: FeaturesUtils,
+    net: MMAudio,
+    fm: FlowMatching,
+    rng: torch.Generator,
+    cfg_strength: float,
+    clip_batch_size_multiplier: int = 40,
+    sync_batch_size_multiplier: int = 40,
+    image_input: bool = False,
+) -> torch.Tensor:
     device = feature_utils.device
     dtype = feature_utils.dtype
 
     bs = len(text)
     if clip_video is not None:
         clip_video = clip_video.to(device, dtype, non_blocking=True)
-        clip_features = feature_utils.encode_video_with_clip(clip_video, batch_size=bs)
+        clip_features = feature_utils.encode_video_with_clip(clip_video,
+                                                             batch_size=bs *
+                                                             clip_batch_size_multiplier)
+        if image_input:
+            clip_features = clip_features.expand(-1, net.clip_seq_len, -1)
     else:
         clip_features = net.get_empty_clip_sequence(bs)
 
-    if sync_video is not None:
+    if sync_video is not None and not image_input:
         sync_video = sync_video.to(device, dtype, non_blocking=True)
-        sync_features = feature_utils.encode_video_with_sync(sync_video, batch_size=bs)
+        sync_features = feature_utils.encode_video_with_sync(sync_video,
+                                                             batch_size=bs *
+                                                             sync_batch_size_multiplier)
     else:
         sync_features = net.get_empty_sync_sequence(bs)
 
@@ -132,7 +144,7 @@ def generate(clip_video: Optional[torch.Tensor],
     return audio
 
 
-LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
+LOGFORMAT = "[%(log_color)s%(levelname)-8s%(reset)s]: %(log_color)s%(message)s%(reset)s"
 
 
 def setup_eval_logging(log_level: int = logging.INFO):
@@ -146,12 +158,14 @@ def setup_eval_logging(log_level: int = logging.INFO):
     log.addHandler(stream)
 
 
-def load_video(video_path: Path, duration_sec: float) -> tuple[torch.Tensor, torch.Tensor, float]:
-    _CLIP_SIZE = 384
-    _CLIP_FPS = 8.0
+_CLIP_SIZE = 384
+_CLIP_FPS = 8.0
 
-    _SYNC_SIZE = 224
-    _SYNC_FPS = 25.0
+_SYNC_SIZE = 224
+_SYNC_FPS = 25.0
+
+
+def load_video(video_path: Path, duration_sec: float, load_all_frames: bool = True) -> VideoInfo:
 
     clip_transform = v2.Compose([
         v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
@@ -167,26 +181,15 @@ def load_video(video_path: Path, duration_sec: float) -> tuple[torch.Tensor, tor
         v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
 
-    reader = StreamingMediaDecoder(video_path)
-    reader.add_basic_video_stream(
-        frames_per_chunk=int(_CLIP_FPS * duration_sec),
-        buffer_chunk_size=-1,
-        frame_rate=_CLIP_FPS,
-        format='rgb24',
-    )
-    reader.add_basic_video_stream(
-        frames_per_chunk=int(_SYNC_FPS * duration_sec),
-        buffer_chunk_size=-1,
-        frame_rate=_SYNC_FPS,
-        format='rgb24',
-    )
+    output_frames, all_frames, orig_fps = read_frames(video_path,
+                                                      list_of_fps=[_CLIP_FPS, _SYNC_FPS],
+                                                      start_sec=0,
+                                                      end_sec=duration_sec,
+                                                      need_all_frames=load_all_frames)
 
-    reader.fill_buffer()
-    data_chunk = reader.pop_chunks()
-    clip_chunk = data_chunk[0]
-    sync_chunk = data_chunk[1]
-    assert clip_chunk is not None
-    assert sync_chunk is not None
+    clip_chunk, sync_chunk = output_frames
+    clip_chunk = torch.from_numpy(clip_chunk).permute(0, 3, 1, 2)
+    sync_chunk = torch.from_numpy(sync_chunk).permute(0, 3, 1, 2)
 
     clip_frames = clip_transform(clip_chunk)
     sync_frames = sync_transform(sync_chunk)
@@ -207,41 +210,46 @@ def load_video(video_path: Path, duration_sec: float) -> tuple[torch.Tensor, tor
     clip_frames = clip_frames[:int(_CLIP_FPS * duration_sec)]
     sync_frames = sync_frames[:int(_SYNC_FPS * duration_sec)]
 
-    return clip_frames, sync_frames, duration_sec
-
-
-def make_video(video_path: Path, output_path: Path, audio: torch.Tensor, sampling_rate: int,
-               duration_sec: float):
-
-    av_video = av.open(video_path)
-    frame_rate = av_video.streams.video[0].guessed_rate
-
-    approx_max_length = int(duration_sec * frame_rate) + 1
-    reader = StreamingMediaDecoder(video_path)
-    reader.add_basic_video_stream(
-        frames_per_chunk=approx_max_length,
-        buffer_chunk_size=-1,
-        format='rgb24',
+    video_info = VideoInfo(
+        duration_sec=duration_sec,
+        fps=orig_fps,
+        clip_frames=clip_frames,
+        sync_frames=sync_frames,
+        all_frames=all_frames if load_all_frames else None,
     )
-    reader.fill_buffer()
-    video_chunk = reader.pop_chunks()[0]
-    assert video_chunk is not None
+    return video_info
 
-    h, w = video_chunk.shape[-2:]
-    video_chunk = video_chunk[:int(frame_rate * duration_sec)]
 
-    writer = StreamingMediaEncoder(output_path)
-    writer.add_audio_stream(
-        sample_rate=sampling_rate,
-        num_channels=audio.shape[0],
-        encoder='aac',  # 'flac' does not work for some reason?
+def load_image(image_path: Path) -> VideoInfo:
+    clip_transform = v2.Compose([
+        v2.Resize((_CLIP_SIZE, _CLIP_SIZE), interpolation=v2.InterpolationMode.BICUBIC),
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+    ])
+
+    sync_transform = v2.Compose([
+        v2.Resize(_SYNC_SIZE, interpolation=v2.InterpolationMode.BICUBIC),
+        v2.CenterCrop(_SYNC_SIZE),
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
+
+    frame = np.array(Image.open(image_path))
+
+    clip_chunk = torch.from_numpy(frame).unsqueeze(0).permute(0, 3, 1, 2)
+    sync_chunk = torch.from_numpy(frame).unsqueeze(0).permute(0, 3, 1, 2)
+
+    clip_frames = clip_transform(clip_chunk)
+    sync_frames = sync_transform(sync_chunk)
+
+    video_info = ImageInfo(
+        clip_frames=clip_frames,
+        sync_frames=sync_frames,
+        original_frame=frame,
     )
-    writer.add_video_stream(frame_rate=frame_rate,
-                            width=w,
-                            height=h,
-                            format='rgb24',
-                            encoder='libx264',
-                            encoder_format='yuv420p')
-    with writer.open():
-        writer.write_audio_chunk(0, audio.float().transpose(0, 1))
-        writer.write_video_chunk(1, video_chunk)
+    return video_info
+
+
+def make_video(video_info: VideoInfo, output_path: Path, audio: torch.Tensor, sampling_rate: int):
+    reencode_with_audio(video_info, output_path, audio, sampling_rate)

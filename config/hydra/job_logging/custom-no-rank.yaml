@@ -1,0 +1,32 @@
+# python logging configuration for tasks
+version: 1
+formatters:
+  simple:
+    format: '[%(asctime)s][%(levelname)s] - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+  colorlog:
+    '()': 'colorlog.ColoredFormatter'
+    format: '[%(cyan)s%(asctime)s%(reset)s][%(log_color)s%(levelname)s%(reset)s] - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+    log_colors:
+      DEBUG: purple
+      INFO: green
+      WARNING: yellow
+      ERROR: red
+      CRITICAL: red
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: colorlog
+    stream: ext://sys.stdout
+  file:
+    class: logging.FileHandler
+    formatter: simple
+    # absolute file path
+    filename: ${hydra.runtime.output_dir}/${now:%Y-%m-%d_%H-%M-%S}-eval.log
+    mode: w
+root:
+  level: INFO
+  handlers: [console, file]
+
+disable_existing_loggers: false

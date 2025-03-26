@@ -1,0 +1,22 @@
+AudioCaps:
+  audio_path: ../data/AudioCaps-test-audioldm-ver
+  # a csv file, with a header row of 'name' and 'caption'
+  # name should match the audio file name without extension
+  # Can be downloaded here: https://github.com/hkchengrex/MMAudio/releases/download/v0.1/AudioCaps_audioldm_data.csv
+  csv_path: ../data/AudioCaps-test-audioldm-ver/data.csv
+
+AudioCaps_full:
+  audio_path: ../data/AudioCaps-test-full-ver
+  # a csv file, with a header row of 'name' and 'caption'
+  # name should match the audio file name without extension
+  # Can be downloaded here: https://github.com/hkchengrex/MMAudio/releases/download/v0.1/AudioCaps_full_data.csv
+  csv_path: ../data/AudioCaps-test-full-ver/data.csv
+
+MovieGen:
+  video_path: ../data/MovieGen/MovieGenAudioBenchSfx/video_with_audio
+  jsonl_path: ../data/MovieGen/MovieGenAudioBenchSfx/metadata
+  
+VGGSound:
+  video_path: ../data/test-videos
+  # from the officially released csv file
+  csv_path: ../data/vggsound.csv

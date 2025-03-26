@@ -9,7 +9,7 @@ from open_clip import create_model_from_pretrained
 from torchvision.transforms import Normalize
 
 from mmaudio.ext.autoencoder import AutoEncoderModule
-from mmaudio.ext.mel_converter import MelConverter
+from mmaudio.ext.mel_converter import get_mel_converter
 from mmaudio.ext.synchformer import Synchformer
 from mmaudio.model.utils.distributions import DiagonalGaussianDistribution
 
@@ -41,6 +41,7 @@ class FeaturesUtils(nn.Module):
         synchformer_ckpt: Optional[str] = None,
         enable_conditions: bool = True,
         mode=Literal['16k', '44k'],
+        need_vae_encoder: bool = True,
     ):
         super().__init__()
 
@@ -62,21 +63,20 @@ class FeaturesUtils(nn.Module):
             self.tokenizer = None
 
         if tod_vae_ckpt is not None:
+            self.mel_converter = get_mel_converter(mode)
             self.tod = AutoEncoderModule(vae_ckpt_path=tod_vae_ckpt,
                                          vocoder_ckpt_path=bigvgan_vocoder_ckpt,
-                                         mode=mode)
+                                         mode=mode,
+                                         need_vae_encoder=need_vae_encoder)
         else:
             self.tod = None
-        self.mel_converter = MelConverter()
 
     def compile(self):
         if self.clip_model is not None:
-            self.encode_video_with_clip = torch.compile(self.encode_video_with_clip)
             self.clip_model.encode_image = torch.compile(self.clip_model.encode_image)
             self.clip_model.encode_text = torch.compile(self.clip_model.encode_text)
         if self.synchformer is not None:
             self.synchformer = torch.compile(self.synchformer)
-        self.tod.encode = torch.compile(self.tod.encode)
         self.decode = torch.compile(self.decode)
         self.vocode = torch.compile(self.vocode)
 
@@ -121,9 +121,11 @@ class FeaturesUtils(nn.Module):
         outputs = []
         if batch_size < 0:
             batch_size = b
-        for i in range(0, b, batch_size):
+        x = rearrange(x, 'b s t c h w -> (b s) 1 t c h w')
+        for i in range(0, b * num_segments, batch_size):
             outputs.append(self.synchformer(x[i:i + batch_size]))
-        x = torch.cat(outputs, dim=0).flatten(start_dim=1, end_dim=2)
+        x = torch.cat(outputs, dim=0)
+        x = rearrange(x, '(b s) 1 t d -> b (s t) d', b=b)
         return x
 
     @torch.inference_mode()

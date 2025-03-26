@@ -15,7 +15,8 @@ class AutoEncoderModule(nn.Module):
                  *,
                  vae_ckpt_path,
                  vocoder_ckpt_path: Optional[str] = None,
-                 mode: Literal['16k', '44k']):
+                 mode: Literal['16k', '44k'],
+                 need_vae_encoder: bool = True):
         super().__init__()
         self.vae: VAE = get_my_vae(mode).eval()
         vae_state_dict = torch.load(vae_ckpt_path, weights_only=True, map_location='cpu')
@@ -34,6 +35,9 @@ class AutoEncoderModule(nn.Module):
 
         for param in self.parameters():
             param.requires_grad = False
+
+        if not need_vae_encoder:
+            del self.vae.encoder
 
     @torch.inference_mode()
     def encode(self, x: torch.Tensor) -> DiagonalGaussianDistribution:
