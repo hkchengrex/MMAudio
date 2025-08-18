@@ -64,7 +64,7 @@ class SelfAttention(nn.Module):
             self,
             x: torch.Tensor,  # batch_size * n_tokens * n_channels
     ) -> torch.Tensor:
-        q, v, k = self.pre_attention(x)
+        q, k, v = self.pre_attention(x)
         out = attention(q, k, v)
         return out
 
