@@ -181,6 +181,9 @@ def load_video(video_path: Path, duration_sec: float, load_all_frames: bool = Tr
         v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
 
+    if not isinstance(video_path, Path) and not isinstance(video_path, str):
+        # for gradio>6.0, video_path is a namespace
+        video_path = Path(video_path.value)
     output_frames, all_frames, orig_fps = read_frames(video_path,
                                                       list_of_fps=[_CLIP_FPS, _SYNC_FPS],
                                                       start_sec=0,
