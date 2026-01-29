@@ -2,6 +2,14 @@ import logging
 from argparse import ArgumentParser
 from pathlib import Path
 
+# Optional: patch conv3d for MPS (Apple Silicon) support
+# Install with: pip install mps-conv3d
+try:
+    from mps_conv3d import patch_conv3d
+    patch_conv3d()
+except ImportError:
+    pass
+
 import torch
 import torchaudio
 
@@ -79,7 +87,8 @@ def main():
     log.info(f'Loaded weights from {model.model_path}')
 
     # misc setup
-    rng = torch.Generator(device=device)
+    # Use CPU generator for reproducible results across devices (MPS RNG differs from CPU/CUDA)
+    rng = torch.Generator(device='cpu')
     rng.manual_seed(seed)
     fm = FlowMatching(min_sigma=0, inference_mode='euler', num_steps=num_steps)
 

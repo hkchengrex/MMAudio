@@ -125,12 +125,15 @@ def generate(
     else:
         negative_text_features = net.get_empty_string_sequence(bs)
 
-    x0 = torch.randn(bs,
-                     net.latent_seq_len,
-                     net.latent_dim,
-                     device=device,
-                     dtype=dtype,
-                     generator=rng)
+    # Generate noise on CPU for reproducibility, then transfer to target device.
+    # MPS has a different RNG implementation that produces different sequences for the same seed.
+    rng_device = rng.device.type if hasattr(rng.device, 'type') else str(rng.device)
+    if rng_device == 'cpu':
+        x0 = torch.randn(bs, net.latent_seq_len, net.latent_dim,
+                         device='cpu', dtype=dtype, generator=rng).to(device)
+    else:
+        x0 = torch.randn(bs, net.latent_seq_len, net.latent_dim,
+                         device=device, dtype=dtype, generator=rng)
     preprocessed_conditions = net.preprocess_conditions(clip_features, sync_features, text_features)
     empty_conditions = net.get_empty_conditions(
         bs, negative_text_features=negative_text_features if negative_text is not None else None)
