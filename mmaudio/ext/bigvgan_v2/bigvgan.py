@@ -365,8 +365,8 @@ class BigVGAN(
         revision: str,
         cache_dir: str,
         force_download: bool,
-        proxies: Optional[Dict],
-        resume_download: bool,
+        proxies: Optional[Dict] = None,
+        resume_download: bool = False,
         local_files_only: bool,
         token: Union[str, bool, None],
         map_location: str = "cpu",  # Additional argument
@@ -376,6 +376,23 @@ class BigVGAN(
     ):
         """Load Pytorch pretrained weights and return the loaded model."""
 
+        # Build kwargs for hf_hub_download, excluding params removed in huggingface_hub 1.0
+        hf_hub_kwargs = dict(
+            revision=revision,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            token=token,
+            local_files_only=local_files_only,
+        )
+        # proxies and resume_download were removed in huggingface_hub 1.0
+        # Only include them for backwards compatibility with older versions
+        import inspect
+        hf_download_params = inspect.signature(hf_hub_download).parameters
+        if "proxies" in hf_download_params:
+            hf_hub_kwargs["proxies"] = proxies
+        if "resume_download" in hf_download_params:
+            hf_hub_kwargs["resume_download"] = resume_download
+
         # Download and load hyperparameters (h) used by BigVGAN
         if os.path.isdir(model_id):
             print("Loading config.json from local directory")
@@ -384,13 +401,7 @@ class BigVGAN(
             config_file = hf_hub_download(
                 repo_id=model_id,
                 filename="config.json",
-                revision=revision,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                token=token,
-                local_files_only=local_files_only,
+                **hf_hub_kwargs,
             )
         h = load_hparams_from_json(config_file)
 
@@ -416,13 +427,7 @@ class BigVGAN(
             model_file = hf_hub_download(
                 repo_id=model_id,
                 filename="bigvgan_generator.pt",
-                revision=revision,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                token=token,
-                local_files_only=local_files_only,
+                **hf_hub_kwargs,
             )
 
         checkpoint_dict = torch.load(model_file, map_location=map_location, weights_only=True)
