@@ -178,6 +178,10 @@ MMAudio was trained on several datasets, including [AudioSet](https://research.g
 
 - [av-benchmark](https://github.com/hkchengrex/av-benchmark) for benchmarking results.
 
+## License
+- The code in this repository is released under the MIT license as found in the [LICENSE file](LICENSE)
+- The checkpoints are released on Hugging Face under the CC-BY-NC 4.0 license as found at [https://creativecommons.org/licenses/by-nc/4.0/](https://creativecommons.org/licenses/by-nc/4.0/).
+
 ## Disclaimer
 
 We have no affiliation with and have no knowledge of the party behind the domain "mmaudio.net".
