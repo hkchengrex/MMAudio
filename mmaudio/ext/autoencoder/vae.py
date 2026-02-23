@@ -75,11 +75,11 @@ class VAE(nn.Module):
         super().__init__()
 
         if data_dim == 80:
-            self.data_mean = nn.Buffer(torch.tensor(DATA_MEAN_80D, dtype=torch.float32))
-            self.data_std = nn.Buffer(torch.tensor(DATA_STD_80D, dtype=torch.float32))
+            self.register_buffer("data_mean", torch.tensor(DATA_MEAN_80D, dtype=torch.float32))
+            self.register_buffer("data_std", torch.tensor(DATA_STD_80D, dtype=torch.float32))
         elif data_dim == 128:
-            self.data_mean = nn.Buffer(torch.tensor(DATA_MEAN_128D, dtype=torch.float32))
-            self.data_std = nn.Buffer(torch.tensor(DATA_STD_128D, dtype=torch.float32))
+            self.register_buffer("data_mean", torch.tensor(DATA_MEAN_128D, dtype=torch.float32))
+            self.register_buffer("data_std", torch.tensor(DATA_STD_128D, dtype=torch.float32))
 
         self.data_mean = self.data_mean.view(1, -1, 1)
         self.data_std = self.data_std.view(1, -1, 1)
