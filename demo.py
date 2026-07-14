@@ -24,7 +24,7 @@ def main():
     parser = ArgumentParser()
     parser.add_argument('--variant',
                         type=str,
-                        default='small_44k',
+                        default='large_44k_v2',
                         help='small_16k, small_44k, medium_44k, large_44k, large_44k_v2')
     parser.add_argument('--video', type=Path, help='Path to the video file')
     parser.add_argument('--prompt', type=str, help='Input prompt', default='')

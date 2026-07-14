@@ -40,9 +40,7 @@ args = parser.parse_args()
 # Load model
 try:
     model: ModelConfig = all_model_cfg[args.variant]
-    if not model.model_path.exists():
-        log.info(f'Downloading model weights for {args.variant}...')
-        model.download_if_needed()
+    model.download_if_needed()
     output_dir = Path('./output/gradio')
     output_dir.mkdir(exist_ok=True, parents=True)
 except Exception as e:
