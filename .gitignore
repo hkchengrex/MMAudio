@@ -118,8 +118,15 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# Environments and local secrets
 .env
+.env*
+*.key
+*.pem
+*.p12
+*.pfx
+.aws/
+.ssh/
 .venv
 env/
 venv/
