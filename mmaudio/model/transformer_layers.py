@@ -7,6 +7,7 @@ from einops import rearrange
 from einops.layers.torch import Rearrange
 
 from mmaudio.ext.rotary_embeddings import apply_rope
+from mmaudio.model.fused_prologue import try_fused_joint_qkv_norm_rope
 from mmaudio.model.low_level import MLP, ChannelLastConv1d, ConvMLP
 
 
@@ -47,6 +48,9 @@ class SelfAttention(nn.Module):
             rot: Optional[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # x: batch_size * n_tokens * n_channels
         qkv = self.qkv(x)
+        return self._prepare_qkv(qkv, rot)
+
+    def _prepare_qkv(self, qkv: torch.Tensor, rot: Optional[torch.Tensor]):
         q, k, v = self.split_into_heads(qkv).chunk(3, dim=-1)
         q = q.squeeze(-1)
         k = k.squeeze(-1)
@@ -103,6 +107,11 @@ class MMDitSingleBlock(nn.Module):
             self.adaLN_modulation = nn.Sequential(nn.SiLU(), nn.Linear(dim, 6 * dim, bias=True))
 
     def pre_attention(self, x: torch.Tensor, c: torch.Tensor, rot: Optional[torch.Tensor]):
+        x, modulation = self._modulate_input(x, c)
+        q, k, v = self.attn.pre_attention(x, rot)
+        return (q, k, v), modulation
+
+    def _modulate_input(self, x: torch.Tensor, c: torch.Tensor):
         # x: BS * N * D
         # cond: BS * D
         modulation = self.adaLN_modulation(c)
@@ -114,8 +123,7 @@ class MMDitSingleBlock(nn.Module):
              gate_mlp) = modulation.chunk(6, dim=-1)
 
         x = modulate(self.norm1(x), shift_msa, scale_msa)
-        q, k, v = self.attn.pre_attention(x, rot)
-        return (q, k, v), (gate_msa, shift_mlp, scale_mlp, gate_mlp)
+        return x, (gate_msa, shift_mlp, scale_mlp, gate_mlp)
 
     def post_attention(self, x: torch.Tensor, attn_out: torch.Tensor, c: tuple[torch.Tensor]):
         if self.pre_only:
@@ -144,6 +152,7 @@ class JointBlock(nn.Module):
     def __init__(self, dim: int, nhead: int, mlp_ratio: float = 4.0, pre_only: bool = False):
         super().__init__()
         self.pre_only = pre_only
+        self.use_fused_prologue = False
         self.latent_block = MMDitSingleBlock(dim,
                                              nhead,
                                              mlp_ratio,
@@ -164,15 +173,38 @@ class JointBlock(nn.Module):
         # latent: BS * N1 * D
         # clip_f: BS * N2 * D
         # c: BS * (1/N) * D
-        x_qkv, x_mod = self.latent_block.pre_attention(latent, extended_c, latent_rot)
-        c_qkv, c_mod = self.clip_block.pre_attention(clip_f, global_c, clip_rot)
-        t_qkv, t_mod = self.text_block.pre_attention(text_f, global_c, rot=None)
+        joint_qkv = None
+        if (self.use_fused_prologue and not self.training and not torch.is_grad_enabled()
+                and not torch.compiler.is_compiling()):
+            x, x_mod = self.latent_block._modulate_input(latent, extended_c)
+            c, c_mod = self.clip_block._modulate_input(clip_f, global_c)
+            t, t_mod = self.text_block._modulate_input(text_f, global_c)
+            blocks = (self.latent_block, self.clip_block, self.text_block)
+            projections = tuple(block.attn.qkv(value) for block, value in zip(blocks, (x, c, t)))
+            rotations = (latent_rot, clip_rot, None)
+            joint_qkv = try_fused_joint_qkv_norm_rope(
+                projections,
+                tuple(block.attn.q_norm.weight for block in blocks),
+                tuple(block.attn.k_norm.weight for block in blocks),
+                rotations,
+                self.latent_block.attn.nheads,
+                q_eps=tuple(block.attn.q_norm.eps for block in blocks),
+                k_eps=tuple(block.attn.k_norm.eps for block in blocks))
+            if joint_qkv is None:
+                x_qkv, c_qkv, t_qkv = (
+                    block.attn._prepare_qkv(projection, rotation)
+                    for block, projection, rotation in zip(blocks, projections, rotations))
+        else:
+            x_qkv, x_mod = self.latent_block.pre_attention(latent, extended_c, latent_rot)
+            c_qkv, c_mod = self.clip_block.pre_attention(clip_f, global_c, clip_rot)
+            t_qkv, t_mod = self.text_block.pre_attention(text_f, global_c, rot=None)
 
         latent_len = latent.shape[1]
         clip_len = clip_f.shape[1]
         text_len = text_f.shape[1]
 
-        joint_qkv = [torch.cat([x_qkv[i], c_qkv[i], t_qkv[i]], dim=2) for i in range(3)]
+        if joint_qkv is None:
+            joint_qkv = [torch.cat([x_qkv[i], c_qkv[i], t_qkv[i]], dim=2) for i in range(3)]
 
         attn_out = attention(*joint_qkv)
         x_attn_out = attn_out[:, :latent_len]

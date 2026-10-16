@@ -152,6 +152,15 @@ class MMAudio(nn.Module):
         self.initialize_weights()
         self.initialize_rotations()
 
+    def enable_fused_prologue(self, enabled: bool = True) -> None:
+        """Opt into the optional CUDA inference prologue for joint attention blocks.
+
+        Unsupported inputs, training, and compiled execution keep the original preparation.
+        This setting does not change checkpoint parameters or state-dict keys.
+        """
+        for block in self.joint_blocks:
+            block.use_fused_prologue = enabled
+
     def initialize_rotations(self):
         base_freq = 1.0
         latent_rot = compute_rope_rotations(self._latent_seq_len,

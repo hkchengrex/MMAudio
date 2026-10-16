@@ -39,6 +39,9 @@ def main():
     parser.add_argument('--seed', type=int, help='Random seed', default=42)
     parser.add_argument('--skip_video_composite', action='store_true')
     parser.add_argument('--full_precision', action='store_true')
+    parser.add_argument('--fused-prologue',
+                        action='store_true',
+                        help='Use optional Triton joint-attention preparation for CUDA inference')
 
     args = parser.parse_args()
 
@@ -76,6 +79,7 @@ def main():
     # load a pretrained model
     net: MMAudio = get_my_mmaudio(model.model_name).to(device, dtype).eval()
     net.load_weights(torch.load(model.model_path, map_location=device, weights_only=True))
+    net.enable_fused_prologue(args.fused_prologue)
     log.info(f'Loaded weights from {model.model_path}')
 
     # misc setup
