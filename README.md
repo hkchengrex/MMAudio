@@ -109,6 +109,36 @@ See the file for more options.
 Simply omit the `--video` option for text-to-audio synthesis.
 The default output (and training) duration is 8 seconds. Longer/shorter durations could also work, but a large deviation from the training duration may result in a lower quality.
 
+### Optional attention prologue fusion
+
+For CUDA inference, `--fused-prologue` combines Q/K RMSNorm, RoPE, and concatenation of
+the audio, video, and text streams into one optional Triton kernel:
+
+```bash
+python demo.py --fused-prologue --duration=8 --video=<path to video> --prompt "your prompt"
+```
+
+For Python callers, use `net.enable_fused_prologue()` after loading the model, then
+run inference under `torch.inference_mode()` or `torch.no_grad()`. The optimization
+requires stable PyTorch 2.7 or newer, Triton, and CUDA BF16/FP16 activations with
+head dimension 64 or 128. It is disabled by default. Unsupported configurations,
+training, gradient-enabled execution, and `torch.compile` use the original path;
+checkpoint parameters and state-dict keys are unchanged.
+
+The kernel preserves the normalization/rotation rounding boundaries, but its FP32
+reduction order can produce small differences from native RMSNorm. This option
+does not promise bitwise-identical generated audio. To reproduce correctness checks
+and operator/block timings without downloading checkpoints:
+
+```bash
+python -m pytest tests/test_fused_prologue.py
+python benchmarks/benchmark_fused_prologue.py --output prologue.json
+```
+
+The benchmark also supports `--levels network` for a full-depth, random-weight
+denoiser forward. Those results are distinct from pretrained generation latency
+or audio-quality measurements.
+
 ### Gradio interface
 
 Supports video-to-audio and text-to-audio synthesis.
